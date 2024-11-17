@@ -42,7 +42,7 @@ This is a mobile application that demonstrates the use of **Machine Learning** f
 ### Installation
 1. Clone the repository:
    ```bash
-   git clone https://github.com/BereKanters/proof-of-concept.git
+   git clone https://github.com/BereKanters/ProofOfConcept.git
    ```
 2. Open the project in Android Studio.
 3. Sync Gradle and ensure all dependencies are installed.
