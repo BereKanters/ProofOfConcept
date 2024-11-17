@@ -1,0 +1,65 @@
+<LinearLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:gravity="center">
+
+    <Button
+        android:id="@+id/btn_classify"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Classify Image" />
+
+    <TextView
+        android:id="@+id/text_result"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:padding="16dp"
+        android:textSize="18sp"
+        android:text="Classification result will appear here" />
+
+    <Button
+        android:id="@+id/btn_correct"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="16dp"
+        android:text="Correct"
+        android:backgroundTint="#4CAF50"
+        android:textColor="#FFFFFF"
+        android:visibility="gone"
+        />
+
+    <EditText
+        android:id="@+id/edit_correct_label"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:hint="Enter the correct label"
+        android:visibility="gone" />
+
+    <Button
+        android:id="@+id/btn_correct_label"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Submit Correction"
+        android:visibility="gone" />
+
+    <TextView
+        android:id="@+id/text_feedback"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:visibility="gone"
+        android:textSize="16sp" />
+
+    <Button
+        android:id="@+id/btn_read_corrections"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Read Corrections" />
+
+    <Button
+        android:id="@+id/btn_export_corrections"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Export Corrections" />
+</LinearLayout>
