@@ -1,7 +1,11 @@
 package com.example.proofofconcept
 
+import android.Manifest
+import android.content.ContentValues
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.graphics.Bitmap
+import android.graphics.Color
 import android.os.Bundle
 import android.provider.MediaStore
 import android.util.Log
@@ -9,15 +13,19 @@ import android.view.View
 import android.widget.Button
 import android.widget.EditText
 import android.widget.TextView
+import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.app.ActivityCompat
+import androidx.core.content.ContextCompat
+import org.json.JSONObject
 import org.tensorflow.lite.Interpreter
 import java.io.File
 import java.io.FileInputStream
 import java.io.IOException
-import java.nio.MappedByteBuffer
-import java.nio.channels.FileChannel
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
+import java.nio.MappedByteBuffer
+import java.nio.channels.FileChannel
 
 class MainActivity : AppCompatActivity() {
 
@@ -47,15 +55,21 @@ class MainActivity : AppCompatActivity() {
         // Load the TensorFlow Lite model
         try {
             interpreter = Interpreter(loadModelFile())
-            loadCorrections() // Load corrections from file into memory
+            loadCorrectionsFromJson() // Load corrections from file into memory
         } catch (e: IOException) {
             e.printStackTrace()
         }
 
         classifyButton.setOnClickListener {
-            val takePictureIntent = Intent(MediaStore.ACTION_IMAGE_CAPTURE)
-            if (takePictureIntent.resolveActivity(packageManager) != null) {
-                startActivityForResult(takePictureIntent, REQUEST_IMAGE_CAPTURE)
+            if (ContextCompat.checkSelfPermission(
+                    this, Manifest.permission.CAMERA
+                ) != PackageManager.PERMISSION_GRANTED
+            ) {
+                ActivityCompat.requestPermissions(
+                    this, arrayOf(Manifest.permission.CAMERA), REQUEST_CAMERA_PERMISSION
+                )
+            } else {
+                launchCameraIntent()
             }
         }
 
@@ -70,6 +84,13 @@ class MainActivity : AppCompatActivity() {
             val corrections = readCorrections()
             textFeedback.text = corrections
             textFeedback.visibility = View.VISIBLE
+        }
+    }
+
+    private fun launchCameraIntent() {
+        val takePictureIntent = Intent(MediaStore.ACTION_IMAGE_CAPTURE)
+        if (takePictureIntent.resolveActivity(packageManager) != null) {
+            startActivityForResult(takePictureIntent, REQUEST_IMAGE_CAPTURE)
         }
     }
 
@@ -108,10 +129,8 @@ class MainActivity : AppCompatActivity() {
         currentPrediction = labelName
         textResult.text = "Label: $labelName, Confidence: %.2f%%".format(confidence)
 
-        // Make buttons visible
-        editCorrectLabel.visibility = View.VISIBLE
-        btnCorrectLabel.visibility = View.VISIBLE
-        btnCorrect.visibility = View.VISIBLE
+        // Adjust visibility
+        toggleCorrectionVisibility(confidence < 50.0)
         textFeedback.visibility = View.GONE
     }
 
@@ -126,7 +145,7 @@ class MainActivity : AppCompatActivity() {
         if (currentPrediction != null) {
             val wrongLabel = currentPrediction!!
             correctionsMap[wrongLabel] = correctLabel // Update in-memory map
-            saveCorrection(wrongLabel, correctLabel) // Save to file
+            saveCorrectionsToJson() // Save to file
 
             // Override the displayed result immediately
             currentPrediction = correctLabel
@@ -137,41 +156,21 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun saveCorrection(wrongLabel: String, correctLabel: String) {
-        val correctionData = "$wrongLabel -> $correctLabel\n"
-        val file = File(filesDir, "corrections.txt")
-        file.appendText(correctionData)
-        correctionsMap[wrongLabel] = correctLabel // Update map dynamically
+    private fun saveCorrectionsToJson() {
+        val json = JSONObject(correctionsMap as Map<*, *>?).toString()
+        File(filesDir, "corrections.json").writeText(json)
     }
 
-    private fun loadCorrections() {
-        try {
-            openFileInput("corrections.txt").bufferedReader().useLines { lines ->
-                lines.forEach { line ->
-                    val parts = line.split("->").map { it.trim() }
-                    if (parts.size == 2) {
-                        correctionsMap[parts[0]] = parts[1]
-                    }
-                }
-            }
-        } catch (e: IOException) {
-            Log.d("MainActivity", "No corrections file found. Starting fresh.")
+    private fun loadCorrectionsFromJson() {
+        val file = File(filesDir, "corrections.json")
+        if (file.exists()) {
+            val json = JSONObject(file.readText())
+            json.keys().forEach { key -> correctionsMap[key] = json.getString(key) }
         }
     }
 
     private fun readCorrections(): String {
-        return try {
-            val file = File(filesDir, "corrections.txt")
-            if (file.exists()) {
-                file.bufferedReader().useLines { lines ->
-                    lines.joinToString("\n")
-                }
-            } else {
-                "No corrections available."
-            }
-        } catch (e: IOException) {
-            "No corrections available."
-        }
+        return correctionsMap.entries.joinToString("\n") { "${it.key} -> ${it.value}" }
     }
 
     private fun convertBitmapToByteBuffer(bitmap: Bitmap): ByteBuffer {
@@ -197,14 +196,23 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun loadLabels(): List<String> {
-        val labels = mutableListOf<String>()
-        assets.open("labels.txt").bufferedReader().useLines { lines ->
-            lines.forEach { labels.add(it) }
+        return try {
+            assets.open("labels.txt").bufferedReader().useLines { it.toList() }
+        } catch (e: IOException) {
+            Log.e("MainActivity", "Error loading labels file", e)
+            emptyList()
         }
-        return labels
+    }
+
+    private fun toggleCorrectionVisibility(isVisible: Boolean) {
+        val visibility = if (isVisible) View.VISIBLE else View.GONE
+        editCorrectLabel.visibility = visibility
+        btnCorrectLabel.visibility = visibility
+        btnCorrect.visibility = visibility
     }
 
     companion object {
         private const val REQUEST_IMAGE_CAPTURE = 1
+        private const val REQUEST_CAMERA_PERMISSION = 2
     }
 }
