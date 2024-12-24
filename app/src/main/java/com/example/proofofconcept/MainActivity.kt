@@ -1,23 +1,24 @@
 package com.example.proofofconcept
 
-import android.Manifest
-import android.content.ContentValues
-import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
-import android.graphics.Color
+import android.graphics.BitmapFactory
+import android.net.Uri
 import android.os.Bundle
-import android.provider.MediaStore
 import android.util.Log
 import android.view.View
 import android.widget.Button
-import android.widget.EditText
 import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
+import androidx.camera.core.CameraSelector
+import androidx.camera.core.ImageCapture
+import androidx.camera.core.ImageCaptureException
+import androidx.camera.core.Preview
+import androidx.camera.lifecycle.ProcessCameraProvider
+import androidx.camera.view.PreviewView
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
-import org.json.JSONObject
 import org.tensorflow.lite.Interpreter
 import java.io.File
 import java.io.FileInputStream
@@ -26,17 +27,17 @@ import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.nio.MappedByteBuffer
 import java.nio.channels.FileChannel
+import java.util.concurrent.ExecutorService
+import java.util.concurrent.Executors
 
 class MainActivity : AppCompatActivity() {
 
     private lateinit var interpreter: Interpreter
     private lateinit var textResult: TextView
-    private lateinit var editCorrectLabel: EditText
-    private lateinit var btnCorrectLabel: Button
-    private lateinit var btnCorrect: Button
-    private lateinit var btnReadCorrections: Button
-    private lateinit var textFeedback: TextView
-    private val correctionsMap = mutableMapOf<String, String>()
+    private lateinit var previewView: PreviewView
+    private lateinit var imageCapture: ImageCapture
+    private lateinit var cameraExecutor: ExecutorService
+
     private var currentPrediction: String? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -44,133 +45,130 @@ class MainActivity : AppCompatActivity() {
         setContentView(R.layout.activity_main)
 
         textResult = findViewById(R.id.text_result)
-        editCorrectLabel = findViewById(R.id.edit_correct_label)
-        btnCorrectLabel = findViewById(R.id.btn_correct_label)
-        btnCorrect = findViewById(R.id.btn_correct)
-        btnReadCorrections = findViewById(R.id.btn_read_corrections)
-        textFeedback = findViewById(R.id.text_feedback)
-
+        previewView = findViewById(R.id.previewView)
         val classifyButton: Button = findViewById(R.id.btn_classify)
 
         // Load the TensorFlow Lite model
         try {
             interpreter = Interpreter(loadModelFile())
-            loadCorrectionsFromJson() // Load corrections from file into memory
         } catch (e: IOException) {
             e.printStackTrace()
         }
 
+        // Initially, the PreviewView is invisible. We will show it when the button is pressed.
         classifyButton.setOnClickListener {
-            if (ContextCompat.checkSelfPermission(
-                    this, Manifest.permission.CAMERA
-                ) != PackageManager.PERMISSION_GRANTED
-            ) {
-                ActivityCompat.requestPermissions(
-                    this, arrayOf(Manifest.permission.CAMERA), REQUEST_CAMERA_PERMISSION
-                )
-            } else {
-                launchCameraIntent()
+            previewView.visibility = View.VISIBLE // Make PreviewView visible after button press
+            startCamera() // Start the camera feed
+        }
+
+        cameraExecutor = Executors.newSingleThreadExecutor()
+    }
+
+    private fun startCamera() {
+        val cameraProviderFuture = ProcessCameraProvider.getInstance(this)
+
+        cameraProviderFuture.addListener({
+            val cameraProvider = cameraProviderFuture.get()
+
+            // Set up Preview
+            val preview = Preview.Builder().build().also {
+                it.setSurfaceProvider(previewView.surfaceProvider)
             }
-        }
 
-        btnCorrectLabel.setOnClickListener { handleCorrection() }
+            // Set up ImageCapture
+            imageCapture = ImageCapture.Builder().build()
 
-        btnCorrect.setOnClickListener {
-            textFeedback.text = "Great! The prediction is correct."
-            textFeedback.visibility = View.VISIBLE
-        }
+            // Select the back camera
+            val cameraSelector = CameraSelector.DEFAULT_BACK_CAMERA
 
-        btnReadCorrections.setOnClickListener {
-            val corrections = readCorrections()
-            textFeedback.text = corrections
-            textFeedback.visibility = View.VISIBLE
-        }
+            try {
+                // Unbind use cases before rebinding
+                cameraProvider.unbindAll()
+
+                // Bind use cases to lifecycle
+                cameraProvider.bindToLifecycle(
+                    this, cameraSelector, preview, imageCapture
+                )
+            } catch (e: Exception) {
+                Log.e("CameraXApp", "Use case binding failed", e)
+            }
+
+            // Now that the camera is ready, you can take a photo
+            takePhoto() // Now it's safe to call takePhoto() after camera setup
+        }, ContextCompat.getMainExecutor(this))
     }
 
-    private fun launchCameraIntent() {
-        val takePictureIntent = Intent(MediaStore.ACTION_IMAGE_CAPTURE)
-        if (takePictureIntent.resolveActivity(packageManager) != null) {
-            startActivityForResult(takePictureIntent, REQUEST_IMAGE_CAPTURE)
+    private fun takePhoto() {
+        // Ensure imageCapture is initialized before using it
+        if (!::imageCapture.isInitialized) {
+            Log.e("MainActivity", "ImageCapture is not initialized.")
+            return
         }
-    }
 
-    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
-        super.onActivityResult(requestCode, resultCode, data)
-        if (requestCode == REQUEST_IMAGE_CAPTURE && resultCode == RESULT_OK && data != null) {
-            val extras = data.extras
-            val imageBitmap = extras?.get("data") as Bitmap?
-            imageBitmap?.let { classifyImage(it) }
-        }
+        // Create a file to save the image
+        val photoFile = File(
+            externalMediaDirs.firstOrNull(),
+            "${System.currentTimeMillis()}.jpg"
+        )
+
+        val outputOptions = ImageCapture.OutputFileOptions.Builder(photoFile).build()
+
+        imageCapture.takePicture(
+            outputOptions,
+            ContextCompat.getMainExecutor(this),
+            object : ImageCapture.OnImageSavedCallback {
+                override fun onImageSaved(outputFileResults: ImageCapture.OutputFileResults) {
+                    val savedUri = outputFileResults.savedUri ?: Uri.fromFile(photoFile)
+                    Toast.makeText(this@MainActivity, "Photo saved: $savedUri", Toast.LENGTH_SHORT).show()
+
+                    // Decode the image and classify it
+                    val imageBitmap = BitmapFactory.decodeFile(photoFile.absolutePath)
+                    imageBitmap?.let { classifyImage(it) }
+                }
+
+                override fun onError(exception: ImageCaptureException) {
+                    Log.e("CameraXApp", "Photo capture failed: ${exception.message}", exception)
+                }
+            }
+        )
     }
 
     private fun classifyImage(bitmap: Bitmap) {
+        // Resize image to fit model input
         val resizedBitmap = Bitmap.createScaledBitmap(bitmap, 224, 224, true)
         val byteBuffer = convertBitmapToByteBuffer(resizedBitmap)
 
-        val output = Array(1) { FloatArray(1001) }
+        // Prepare the output array to store prediction results
+        val output = Array(1) { FloatArray(1001) }  // 1001 classes for ImageNet
         interpreter.run(byteBuffer, output)
+
+        // Process the result
         displayResults(output[0])
     }
 
     private fun displayResults(output: FloatArray) {
-        val labels = loadLabels()
+        val labels = loadLabels()  // Load class labels from 'labels.txt'
+
+        // Find the index of the max value in the output array (classification result)
         val maxIndex = output.indices.maxByOrNull { output[it] } ?: -1
-        val confidence = output[maxIndex] * 100
+        val confidence = output[maxIndex] * 100  // Convert to percentage
+
+        // Get the predicted label from the labels list
         var labelName = if (maxIndex in labels.indices) labels[maxIndex] else "Unknown"
 
-        // Apply corrections dynamically
-        labelName = correctionsMap[labelName] ?: labelName
-
-        // Confidence threshold check
-        if (confidence < 50.0) {
-            labelName = "Uncertain"
+        // If the confidence is too low, don't display a label
+        if (confidence < 10.0) {
+            labelName = ""  // Leave label empty if confidence is low
         }
 
-        currentPrediction = labelName
-        textResult.text = "Label: $labelName, Confidence: %.2f%%".format(confidence)
-
-        // Adjust visibility
-        toggleCorrectionVisibility(confidence < 50.0)
-        textFeedback.visibility = View.GONE
-    }
-
-    private fun handleCorrection() {
-        val correctLabel = editCorrectLabel.text.toString().trim()
-        if (correctLabel.isEmpty()) {
-            textFeedback.text = "Please enter the correct label."
-            textFeedback.visibility = View.VISIBLE
-            return
+        // Update the UI with the classification result
+        textResult.text = if (labelName.isNotEmpty()) {
+            "Label: $labelName, Confidence: %.2f%%".format(confidence)
+        } else {
+            "Classification confidence too low"
         }
 
-        if (currentPrediction != null) {
-            val wrongLabel = currentPrediction!!
-            correctionsMap[wrongLabel] = correctLabel // Update in-memory map
-            saveCorrectionsToJson() // Save to file
 
-            // Override the displayed result immediately
-            currentPrediction = correctLabel
-            textResult.text = "Label: $correctLabel, Confidence: 100% (Corrected)"
-            textFeedback.text = "Correction submitted: $wrongLabel -> $correctLabel"
-            textFeedback.visibility = View.VISIBLE
-            editCorrectLabel.text.clear()
-        }
-    }
-
-    private fun saveCorrectionsToJson() {
-        val json = JSONObject(correctionsMap as Map<*, *>?).toString()
-        File(filesDir, "corrections.json").writeText(json)
-    }
-
-    private fun loadCorrectionsFromJson() {
-        val file = File(filesDir, "corrections.json")
-        if (file.exists()) {
-            val json = JSONObject(file.readText())
-            json.keys().forEach { key -> correctionsMap[key] = json.getString(key) }
-        }
-    }
-
-    private fun readCorrections(): String {
-        return correctionsMap.entries.joinToString("\n") { "${it.key} -> ${it.value}" }
     }
 
     private fun convertBitmapToByteBuffer(bitmap: Bitmap): ByteBuffer {
@@ -196,23 +194,17 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun loadLabels(): List<String> {
-        return try {
-            assets.open("labels.txt").bufferedReader().useLines { it.toList() }
-        } catch (e: IOException) {
-            Log.e("MainActivity", "Error loading labels file", e)
-            emptyList()
+        val labels = mutableListOf<String>()
+        assets.open("labels.txt").bufferedReader().useLines { lines ->
+            lines.forEach { labels.add(it) }
         }
+        return labels
     }
 
-    private fun toggleCorrectionVisibility(isVisible: Boolean) {
-        val visibility = if (isVisible) View.VISIBLE else View.GONE
-        editCorrectLabel.visibility = visibility
-        btnCorrectLabel.visibility = visibility
-        btnCorrect.visibility = visibility
-    }
-
-    companion object {
-        private const val REQUEST_IMAGE_CAPTURE = 1
-        private const val REQUEST_CAMERA_PERMISSION = 2
+    override fun onDestroy() {
+        super.onDestroy()
+        interpreter.close() // Don't forget to close the interpreter when done
     }
 }
+
+

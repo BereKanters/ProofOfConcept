@@ -36,6 +36,8 @@ android {
 }
 
 dependencies {
+    implementation("org.jetbrains.kotlin:kotlin-stdlib:1.8.22")
+    implementation("org.jetbrains.kotlin:kotlin-stdlib-jdk8:1.8.22")  // Make sure both are the same version
 
     // Core dependencies
     implementation(libs.androidx.core.ktx)
@@ -48,6 +50,22 @@ dependencies {
     testImplementation("junit:junit:4.13.2")  // Direct reference for JUnit
     androidTestImplementation(libs.androidx.junit)  // Instrumented testing
     androidTestImplementation(libs.espresso.core)  // Espresso alias from libs.versions.toml
+    implementation("androidx.camera:camera-core:1.3.0") {
+        exclude(group = "org.jetbrains.kotlin", module = "kotlin-stdlib-jdk8")
+    }
+
+    implementation("androidx.camera:camera-camera2:1.3.0") {
+        exclude(group = "org.jetbrains.kotlin", module = "kotlin-stdlib-jdk8")
+    }
+
+    implementation("androidx.camera:camera-lifecycle:1.3.0") {
+        exclude(group = "org.jetbrains.kotlin", module = "kotlin-stdlib-jdk8")
+    }
+
+    implementation("androidx.camera:camera-view:1.3.0") {
+        exclude(group = "org.jetbrains.kotlin", module = "kotlin-stdlib-jdk8")
+    }
+
 
     // ML Kit and TensorFlow Lite dependencies
     implementation("com.google.mlkit:image-labeling-custom:16.0.0")
