@@ -6,76 +6,40 @@
     android:gravity="center">
 
 
-
-    <!-- Button to capture an image -->
+    <!-- Button voor classificeren -->
     <Button
         android:id="@+id/btn_classify"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:text="Capture Image"
+        android:text="Classify Image"
         android:layout_marginTop="16dp" />
 
-    <!-- TextView for classification result -->
+    <!-- TextView voor resultaat -->
     <TextView
         android:id="@+id/text_result"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:padding="16dp"
         android:textSize="18sp"
-        android:text="Classification result will appear here" />
+        android:text="Results will be shown here" />
 
-    <!-- Button for correcting the classification result -->
-    <Button
-        android:id="@+id/btn_correct"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="16dp"
-        android:text="Correct"
-        android:backgroundTint="#4CAF50"
-        android:textColor="#FFFFFF"
-         />
 
-    <!-- EditText to enter the correct label (invisible initially) -->
+    <!-- EditText invoeren juiste object -->
     <EditText
-        android:id="@+id/edit_correct_label"
+        android:id="@+id/correction_input"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:hint="Enter the correct label"
-         />
+        android:hint="Enter correction" />
 
-    <!-- Button to submit correction (invisible initially) -->
     <Button
-        android:id="@+id/btn_correct_label"
+        android:id="@+id/btn_submit_correction"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:text="Submit Correction"
-         />
+        android:text="Submit Correction" />
 
-    <!-- TextView for feedback on corrections (invisible initially) -->
-    <TextView
-        android:id="@+id/text_feedback"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:visibility="gone"
-        android:textSize="16sp" />
 
-    <!-- Button to read previous corrections -->
-    <Button
-        android:id="@+id/btn_read_corrections"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:text="Read Corrections"
-        android:visibility="gone"/>
 
-    <!-- Button to export corrections -->
-    <Button
-        android:id="@+id/btn_export_corrections"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:text="Export Corrections"
-        android:visibility="gone"/>
-
-    <!-- FrameLayout to contain PreviewView -->
+    <!-- FrameLayout PreviewView -->
     <FrameLayout
         android:layout_width="match_parent"
         android:layout_height="match_parent">
